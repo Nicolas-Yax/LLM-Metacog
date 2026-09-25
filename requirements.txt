@@ -1,0 +1,17 @@
+# Figures (plot_*.ipynb, notebook_helper.py)
+numpy
+scipy>=1.9
+pandas
+matplotlib>=3.7
+torch>=2.1
+datasets          # the performance files are pickled Hugging Face datasets
+tensorboard       # plot_training.ipynb only
+tqdm
+jupyter
+huggingface_hub>=0.34   # `hf download` for the data and models
+
+# Training and evaluation (GPU, Linux): uncomment to run the *.py scripts
+# transformers
+# peft
+# trl
+# unsloth
