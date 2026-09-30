@@ -90,12 +90,12 @@ def sem(a, axis=0):
 def consistency(probs, n_options):
     """1 − normalised entropy of the answer distribution (1 = always the same answer)."""
     p = np.asarray(probs, dtype=float)
-    entropy = -np.where(p > 0, p * np.log(np.where(p > 0, p, 1.0)), 0.0).sum(axis=1)
+    entropy = -(p * np.log(p)).sum(axis=1)
     return 1 - entropy / np.log(n_options)
 
 # ======================================================================= loading
 def find_runs(dev=False):
-    """Finished run folders per (dataset, model, probe), sorted by name.
+    """Find finished run folders for each (dataset, model, probe), sorted by name.
 
     Run folder names: <dataset>_<epochs>_<lr>_<wd>_<bs>_<rank>_<warmup>_probe-<p>_<id>.
     """
@@ -113,15 +113,15 @@ def find_runs(dev=False):
 
 
 def checkpoint_names(run):
-    """checkpoint-* folders of a run, in training order."""
+    """Find checkpoint-* folders of a run, in training order."""
     names = [k for k in os.listdir(os.path.join(RUNS_PATH, run)) if k.startswith("checkpoint-")]
     return sorted(names, key=lambda k: int(k.split("-")[1]))
 
 
 def load_eval(run, dataset, checkpoint=None, split=None):
-    """{split: {"predictions", "accuracies", "consistency"}} of one eval file, or None.
+    """Return {split: {"predictions", "accuracies", "consistency"}} of one eval file, or None.
 
-    checkpoint=None is the final model (full splits); intermediate checkpoints
+    checkpoint=None returns the final trained model (full splits); intermediate checkpoints
     hold a 1000-question subsample ('train_subset', 'test').
     """
     path = os.path.join(RUNS_PATH, run, *([checkpoint] if checkpoint else []),
@@ -138,7 +138,7 @@ def load_eval(run, dataset, checkpoint=None, split=None):
 
 
 def load_run_checkpoints(run, dataset):
-    """Every checkpoint of a run (None where not evaluated), final model last.
+    """Load every checkpoint of a run (None where not evaluated), final model last.
 
     Empty if no intermediate checkpoint was evaluated (--last_only runs).
     """
@@ -150,7 +150,7 @@ def load_run_checkpoints(run, dataset):
 
 
 def load_trained(split=None, eval_dataset=None, dev=False):
-    """Eval results of the trained probes: data[train dataset][model][probe] -> runs.
+    """Load eval results of the trained probes for all train dataset, model and probe on the given eval dataset: data[train dataset][model][probe] -> runs.
 
     A run is the final model's load_eval() output or, with dev=True, the list
     of its checkpoints (load_run_checkpoints). eval_dataset defaults to the
@@ -176,12 +176,12 @@ def load_trained(split=None, eval_dataset=None, dev=False):
 
 
 def load_trained_cross(split=None):
-    """Cross-dataset evals: data[eval dataset][train dataset][model][probe] -> runs."""
+    """Load cross-dataset evals: data[eval dataset][train dataset][model][probe] -> runs."""
     return {e: load_trained(split, eval_dataset=e) for e in DATASETS}
 
 
 def load_performance(split="test"):
-    """Per-question accuracy and consistency of the base models: acc[d][m], cons[d][m]."""
+    """Load per-question accuracy and consistency of the base models: acc[d][m], cons[d][m]."""
     acc = {d: {m: np.nan for m in MODELS} for d in DATASETS}
     cons = {d: {m: np.nan for m in MODELS} for d in DATASETS}
     for d in DATASETS:
@@ -198,7 +198,7 @@ def load_performance(split="test"):
 
 
 def load_baseline():
-    """Verbalised confidence of the base models (test split): base[d][m], NaN if unparsed."""
+    """Load verbalised confidence of the base models (test split): base[d][m], NaN if unparsed."""
     base = {d: {m: None for m in MODELS} for d in DATASETS}
     for d in DATASETS:
         for m in MODELS:
@@ -222,17 +222,18 @@ def load_embeddings(dataset, split):
     except Exception:
         obj = torch.load(path, weights_only=False, map_location="cpu")
     x = obj[split]["embeddings"].to(torch.float32)
-    del obj
-    gc.collect()
+    del obj #not necessary but these objects are very large so better make sure they don't remain in RAM
+    gc.collect() 
     return torch.nn.functional.normalize(x, dim=1)
 
 
 def knn_distance(test, train, n_nearest=N_NEAREST, device="cpu",
                  chunk_test=8192, chunk_train=1024):
-    """Per test row, mean cosine distance to its n_nearest closest train rows (chunked)."""
+    """Computes per test row, mean cosine distance to its n_nearest closest train rows (chunked for efficiency - gpu is much faster here)."""
     dtype = torch.float16 if device == "cuda" else torch.float32
     k = max(1, min(n_nearest, len(train)))
     out = torch.empty(len(test))
+    #print("computing KNN distance - if this process is too slow please consider using a GPU")
     for i in range(0, len(test), chunk_test):
         t = test[i:i + chunk_test].to(device, dtype)
         best = torch.full((len(t), k), float("inf"), device=device, dtype=torch.float32)
@@ -245,20 +246,20 @@ def knn_distance(test, train, n_nearest=N_NEAREST, device="cpu",
 
 
 def load_embedding_distances(split="test"):
-    """dist[a][e]: per question of the `split` split of e, distance to the train split of a."""
+    """Load distance matrix for all test questions to all train datasets. dist[a][e]: per question of the `split` split of e (only make sense for test split in our paper), distance to the train split of a."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dist = {a: {} for a in DATASETS}
     for a in DATASETS:
         train = load_embeddings(a, "train")
         for e in tqdm(DATASETS, desc=f"distances to {SHORT_LABELS[a]}"):
             dist[a][e] = knn_distance(load_embeddings(e, split), train, device=device)
-        del train
+        del train #same: not neccesary but better make sure this does not remain in RAM
         gc.collect()
     return dist
 
 
 def load_question_errors(emb_dist, probes=("end",), split="test"):
-    """Per-question |conf − accuracy| and |conf − consistency| of the final models,
+    """Load per-question |conf − accuracy| and |conf − consistency| of the final models,
     averaged over every run (all models) trained on a and evaluated on e:
     err_acc[a][e], err_cons[a][e]."""
     runs = find_runs()
@@ -304,7 +305,7 @@ TB_TAGS = {
 
 
 def load_tensorboard_log(run):
-    """{tag: (steps, values)} of one run, or None if it has no event file."""
+    """Load tensorboard events about training runs. {tag: (steps, values)} of one run, or None if it has no event file."""
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
     path = os.path.join(LOG_PATH, run)

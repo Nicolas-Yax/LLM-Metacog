@@ -1,14 +1,17 @@
 # MetaCog
 
-Confidence probes for LLMs: a LoRA adapter and a linear head, attached to the middle (`mid`) or last (`end`) decoder layer, are trained to predict the base model's accuracy on each question. We then ask what the trained confidence actually tracks: the model's **accuracy**, or its **self-consistency** (how concentrated its answer distribution is), in and out of the training distribution.
+Code for the paper LLMs learn different forms of metacognition when trained to predict their own accuracy (https://arxiv.org/abs/2609.33886).
 
-10 base models (Llama, Qwen, Mistral, Phi) · 5 multiple-choice datasets (MATH and MMLU-Pro with 4 and 10 options, MedMCQA) · 5 runs per configuration.
+This work trains LoRA adapters and a linear head, attached to the middle (`mid`) or last (`end`) decoder layer. These are trained to predict the base model's accuracy on each question. We then ask what the trained confidence actually tracks: the model's **true accuracy**, or its **output consistency** (how concentrated its answer distribution is), in and out of the training distribution. The results suggest that, on questions far from the training distribution, trained probes linearly track consistency better than true accuracy while on questions close to the training distribution they linearly track true accuracy better.
+
+This paper replicates results across 10 base models (Llama, Qwen, Mistral, Phi), 5 multiple-choice datasets (MATH and MMLU-Pro with 4 and 10 options, MedMCQA) with 5 training runs per configuration.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
 ```
+(uncomment the last lines for also installing training libraries)
 
 Download the data (evaluation results, per-question performance, embeddings, training logs) into `data/`:
 
