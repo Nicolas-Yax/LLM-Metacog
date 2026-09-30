@@ -6,6 +6,8 @@ This work trains LoRA adapters and a linear head, attached to the middle (`mid`)
 
 This paper replicates results across 10 base models (Llama, Qwen, Mistral, Phi), 5 multiple-choice datasets (MATH and MMLU-Pro with 4 and 10 options, MedMCQA) with 5 training runs per configuration.
 
+NOTE: the trained models are not finished uploading yet. They should be available soon1
+
 ## Setup
 
 ```bash
